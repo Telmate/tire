@@ -80,6 +80,8 @@ module Tire
         module InstanceMethods
 
           attr_accessor :id
+          alias :_id :id
+          alias :_id= :id=
 
           def initialize(attributes={})
             # Make a copy of objects in the property defaults hash, so default values such as `[]` or `{ foo: [] }` are left intact
