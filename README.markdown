@@ -1,27 +1,37 @@
 Tire
 =========
 
-_Tire_ is a Ruby (1.8 or 1.9) client for the [ElasticSearch](http://www.elasticsearch.org/)
+---------------------------------------------------------------------------------------------------
+
+  NOTICE: This library has been renamed and retired in September 2013
+          ([read the explanation](https://github.com/karmi/retire/wiki/Tire-Retire)).
+          It is not considered compatible with Elasticsearch 1.x.
+
+  Have a look at the **<http://github.com/elasticsearch/elasticsearch-rails>** suite of gems,
+  which contain similar set of features for ActiveModel/Record and Rails integration as Tire.
+
+---------------------------------------------------------------------------------------------------
+
+_Tire_ is a Ruby (1.8 or 1.9) client for the [Elasticsearch](http://www.elasticsearch.org/)
 search engine/database.
 
-_ElasticSearch_ is a scalable, distributed, cloud-ready, highly-available,
+_Elasticsearch_ is a scalable, distributed, cloud-ready, highly-available,
 full-text search engine and database with
-[powerfull aggregation features](http://www.elasticsearch.org/guide/reference/api/search/facets/),
+[powerful aggregation features](http://www.elasticsearch.org/guide/reference/api/search/facets/),
 communicating by JSON over RESTful HTTP, based on [Lucene](http://lucene.apache.org/), written in Java.
 
-This Readme provides a brief overview of _Tire's_ features. The more detailed documentation is at <http://karmi.github.com/tire/>.
+This Readme provides a brief overview of _Tire's_ features. The more detailed documentation is at <http://karmi.github.com/retire/>.
 
-Both of these documents contain a lot of information. Please set aside some time to read them thoroughly, before you blindly dive into „somehow making it work“. Just skimming through it **won't work** for you. For more information, please refer to the [integration test suite](https://github.com/karmi/tire/tree/master/test/integration)
-and [issues](https://github.com/karmi/tire/issues).
+Both of these documents contain a lot of information. Please set aside some time to read them thoroughly, before you blindly dive into „somehow making it work“. Just skimming through it **won't work** for you. For more information, please see the project [Wiki](https://github.com/karmi/tire/wiki/_pages), search the [issues](https://github.com/karmi/tire/issues), and refer to the [integration test suite](https://github.com/karmi/tire/tree/master/test/integration).
 
 Installation
 ------------
 
-OK. First, you need a running _ElasticSearch_ server. Thankfully, it's easy. Let's define easy:
+OK. First, you need a running _Elasticsearch_ server. Thankfully, it's easy. Let's define easy:
 
-    $ curl -k -L -o elasticsearch-0.19.0.tar.gz http://github.com/downloads/elasticsearch/elasticsearch/elasticsearch-0.19.0.tar.gz
-    $ tar -zxvf elasticsearch-0.19.0.tar.gz
-    $ ./elasticsearch-0.19.0/bin/elasticsearch -f
+    $ curl -k -L -o elasticsearch-0.20.6.tar.gz http://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-0.20.6.tar.gz
+    $ tar -zxvf elasticsearch-0.20.6.tar.gz
+    $ ./elasticsearch-0.20.6/bin/elasticsearch -f
 
 See, easy. On a Mac, you can also use _Homebrew_:
 
@@ -41,11 +51,11 @@ Of course, you can install it from the source as well:
 Usage
 -----
 
-_Tire_ exposes easy-to-use domain specific language for fluent communication with _ElasticSearch_.
+_Tire_ exposes easy-to-use domain specific language for fluent communication with _Elasticsearch_.
 
 It easily blends with your _ActiveModel_/_ActiveRecord_ classes for convenient usage in _Rails_ applications.
 
-To test-drive the core _ElasticSearch_ functionality, let's require the gem:
+To test-drive the core _Elasticsearch_ functionality, let's require the gem:
 
 ```ruby
     require 'rubygems'
@@ -53,7 +63,7 @@ To test-drive the core _ElasticSearch_ functionality, let's require the gem:
 ```
 
 Please note that you can copy these snippets from the much more extensive and heavily annotated file
-in [examples/tire-dsl.rb](http://karmi.github.com/tire/).
+in [examples/tire-dsl.rb](http://karmi.github.com/retire/).
 
 Also, note that we're doing some heavy JSON lifting here. _Tire_ uses the
 [_multi_json_](https://github.com/intridea/multi_json) gem as a generic JSON wrapper,
@@ -102,7 +112,7 @@ for a specific document type:
 ```
 
 Of course, we may have large amounts of data, and it may be impossible or impractical to add them to the index
-one by one. We can use _ElasticSearch's_
+one by one. We can use _Elasticsearch's_
 [bulk storage](http://www.elasticsearch.org/guide/reference/api/bulk.html).
 Notice, that collection items must have an `id` property or method,
 and should have a `type` property, if you've set any specific mapping for the index.
@@ -344,7 +354,7 @@ When you set the log level to _debug_:
 the JSON responses are logged as well. This is not a great idea for production environment,
 but it's priceless when you want to paste a complicated transaction to the mailing list or IRC channel.
 
-The _Tire_ DSL tries hard to provide a strong Ruby-like API for the main _ElasticSearch_ features.
+The _Tire_ DSL tries hard to provide a strong Ruby-like API for the main _Elasticsearch_ features.
 
 By default, _Tire_ wraps the results collection in a enumerable `Results::Collection` class,
 and result items in a `Results::Item` class, which looks like a child of `Hash` and `Openstruct`,
@@ -357,7 +367,7 @@ If that seems like a great idea to you, there's a big chance you already have su
 
 One would bet it's an `ActiveRecord` or `ActiveModel` class, containing model of your Rails application.
 
-Fortunately, _Tire_ makes blending _ElasticSearch_ features into your models trivially possible.
+Fortunately, _Tire_ makes blending _Elasticsearch_ features into your models trivially possible.
 
 
 ActiveModel Integration
@@ -365,7 +375,7 @@ ActiveModel Integration
 
 If you're the type with no time for lengthy introductions, you can generate a fully working
 example Rails application, with an `ActiveRecord` model and a search form, to play with
-(it even downloads _ElasticSearch_ itself, generates the application skeleton and leaves you with
+(it even downloads _Elasticsearch_ itself, generates the application skeleton and leaves you with
 a _Git_ repository to explore the steps and the code):
 
     $ rails new searchapp -m https://raw.github.com/karmi/tire/master/examples/rails-application-template.rb
@@ -384,7 +394,7 @@ To make it searchable with _Tire_, just `include` it:
 When you now save a record:
 
 ```ruby
-    Article.create :title =>   "I Love ElasticSearch",
+    Article.create :title =>   "I Love Elasticsearch",
                    :content => "...",
                    :author =>  "Captain Nemo",
                    :published_on => Time.now
@@ -472,6 +482,10 @@ In this case, just wrap the `mapping` method in a `settings` one, passing it the
     end
 ```
 
+Note, that the index will be created with settings and mappings only when it doesn't exist yet.
+To re-create the index with correct configuration, delete it first: `URL.index.delete` and
+create it afterwards: `URL.create_elasticsearch_index`.
+
 It may well be reasonable to wrap the index creation logic declared with `Tire.index('urls').create`
 in a class method of your model, in a module method, etc, to have better control on index creation when
 bootstrapping the application with Rake tasks or when setting up the test suite.
@@ -529,7 +543,7 @@ The easiest way is to customize the `to_json` serialization support of your mode
     class Article < ActiveRecord::Base
       # ...
 
-      include_root_in_json = false
+      self.include_root_in_json = false
       def to_indexed_json
         to_json :except => ['updated_at'], :methods => ['length']
       end
@@ -574,9 +588,44 @@ control on how the documents are added to or removed from the index:
     end
 ```
 
+Sometimes, you might want to have complete control about the indexing process. In such situations,
+just drop down one layer and use the `Tire::Index#store` and `Tire::Index#remove` methods directly:
+
+```ruby
+    class Article < ActiveRecord::Base
+      acts_as_paranoid
+      include Tire::Model::Search
+
+      after_save do
+        if deleted_at.nil?
+          self.index.store self
+        else
+          self.index.remove self
+        end
+      end
+    end
+```
+
+Of course, in this way, you're still performing an HTTP request during your database transaction,
+which is not optimal for large-scale applications. In these situations, a better option would be processing
+the index operations in background, with something like [Resque](https://github.com/resque/resque) or
+[Sidekiq](https://github.com/mperham/sidekiq):
+
+```ruby
+    class Article < ActiveRecord::Base
+      include Tire::Model::Search
+
+      after_save    { Indexer::Index.perform_async(document) }
+      after_destroy { Indexer::Remove.perform_async(document) }
+    end
+```
+
+When you're integrating _Tire_ with ActiveRecord models, you should use the `after_commit`
+and `after_rollback` hooks to keep the index in sync with your database.
+
 The results returned by `Article.search` are wrapped in the aforementioned `Item` class, by default.
-This way, we have a fast and flexible access to the properties returned from _ElasticSearch_ (via the
-`_source` or `fields` JSON properties). This way, we can index whatever JSON we like in _ElasticSearch_,
+This way, we have a fast and flexible access to the properties returned from _Elasticsearch_ (via the
+`_source` or `fields` JSON properties). This way, we can index whatever JSON we like in _Elasticsearch_,
 and retrieve it, simply, via the dot notation:
 
 ```ruby
@@ -588,18 +637,18 @@ and retrieve it, simply, via the dot notation:
 ```
 
 The `Item` instances masquerade themselves as instances of your model within a _Rails_ application
-(based on the `_type` property retrieved from _ElasticSearch_), so you can use them carefree;
+(based on the `_type` property retrieved from _Elasticsearch_), so you can use them carefree;
 all the `url_for` or `dom_id` helpers work as expected.
 
-If you need to access the “real” model (eg. to access its assocations or methods not
-stored in _ElasticSearch_), just load it from the database:
+If you need to access the “real” model (eg. to access its associations or methods not
+stored in _Elasticsearch_), just load it from the database:
 
 ```ruby
     puts article.load(:include => 'comments').comments.size
 ```
 
 You can see that _Tire_ stays as far from the database as possible. That's because it believes
-you have most of the data you want to display stored in _ElasticSearch_. When you need
+you have most of the data you want to display stored in _Elasticsearch_. When you need
 to eagerly load the records from the database itself, for whatever reason,
 you can do it with the `:load` option when searching:
 
@@ -617,52 +666,60 @@ Instead of simple `true`, you can pass any options for the model's find method:
     end
 ```
 
-Note that _Tire_ search results are fully compatible with [`will_paginate`](https://github.com/mislav/will_paginate),
-so you can pass all the usual parameters to the `search` method in the controller:
+If you would like to access properties returned by Elasticsearch (such as `_score`),
+in addition to model instance, use the `each_with_hit` method:
+
+```ruby
+    results = Article.search 'One', :load => true
+    results.each_with_hit do |result, hit|
+      puts "#{result.title} (score: #{hit['_score']})"
+    end
+
+    # One (score: 0.300123)
+```
+
+Note that _Tire_ search results are fully compatible with [_WillPaginate_](https://github.com/mislav/will_paginate)
+and [_Kaminari_](https://github.com/amatsuda/kaminari), so you can pass all the usual parameters to the
+`search` method in the controller:
 
 ```ruby
     @articles = Article.search params[:q], :page => (params[:page] || 1)
 ```
 
-OK. Chances are, you have lots of records stored in your database. How will you get them to _ElasticSearch_? Easy:
+OK. Chances are, you have lots of records stored in your database. How will you get them to _Elasticsearch_? Easy:
 
 ```ruby
     Article.index.import Article.all
 ```
 
 This way, however, all your records are loaded into memory, serialized into JSON,
-and sent down the wire to _ElasticSearch_. Not practical, you say? You're right.
+and sent down the wire to _Elasticsearch_. Not practical, you say? You're right.
 
-Provided your model implements some sort of _pagination_ — and it probably does —, you can just run:
+When your model is an `ActiveRecord::Base` or `Mongoid::Document` one, or when it implements
+some sort of pagination, you can just run:
 
 ```ruby
     Article.import
 ```
 
-In this case, the `Article.paginate` method is called, and your records are sent to the index
-in chunks of 1000. If that number doesn't suit you, just provide a better one:
-
-```ruby
-    Article.import :per_page => 100
-```
-
-Any other parameters you provide to the `import` method are passed down to the `paginate` method.
+Depending on the setup of your model, either `find_in_batches`, `limit..skip` or pagination is used
+to import your data.
 
 Are we saying you have to fiddle with this thing in a `rails console` or silly Ruby scripts? No.
-Just call the included _Rake_ task on the commandline:
+Just call the included _Rake_ task on the command line:
 
 ```bash
-    $ rake environment tire:import CLASS='Article'
+    $ rake environment tire:import:all
 ```
 
-You can also force-import the data by deleting the index first (and creating it with mapping
-provided by the `mapping` block in your model):
+You can also force-import the data by deleting the index first (and creating it with
+correct settings and/or mappings provided by the `mapping` block in your model):
 
 ```bash
     $ rake environment tire:import CLASS='Article' FORCE=true
 ```
 
-When you'll spend more time with _ElasticSearch_, you'll notice how
+When you'll spend more time with _Elasticsearch_, you'll notice how
 [index aliases](http://www.elasticsearch.org/guide/reference/api/admin-indices-aliases.html)
 are the best idea since the invention of inverted index.
 You can index your data into a fresh index (and possibly update an alias once everything's fine):
@@ -671,13 +728,18 @@ You can index your data into a fresh index (and possibly update an alias once ev
     $ rake environment tire:import CLASS='Article' INDEX='articles-2011-05'
 ```
 
-OK. All this time we have been talking about `ActiveRecord` models, since
-it is a reasonable _Rails_' default for the storage layer.
+Finally, consider the Rake importing task just a convenient starting point. If you're loading
+substantial amounts of data, want better control on which data will be indexed, etc., use the
+lower-level Tire API with eg. `ActiveRecordBase#find_in_batches` directly:
 
-But what if you use another database such as [MongoDB](http://www.mongodb.org/),
-another object mapping library, such as [Mongoid](http://mongoid.org/) or [MongoMapper](http://mongomapper.com/)?
-
-Well, things stay mostly the same:
+```ruby
+    Article.where("published_on > ?", Time.parse("2012-10-01")).find_in_batches(include: authors) do |batch|
+      Tire.index("articles").import batch
+    end
+```
+If you're using a different database, such as [MongoDB](http://www.mongodb.org/),
+another object mapping library, such as [Mongoid](http://mongoid.org/) or [MongoMapper](http://mongomapper.com/),
+things stay mostly the same:
 
 ```ruby
     class Article
@@ -696,7 +758,7 @@ Well, things stay mostly the same:
 
     end
 
-    Article.create :title => 'I Love ElasticSearch'
+    Article.create :title => 'I Love Elasticsearch'
 
     Article.tire.search 'love'
 ```
@@ -711,9 +773,9 @@ database to store stuff like `{ :name => 'Tire', :tags => [ 'ruby', 'search' ] }
 Because all you need, really, is to just dump a JSON-representation of your data into a database and load it back again.
 Because you've noticed that _searching_ your data is a much more effective way of retrieval
 then constructing elaborate database query conditions.
-Because you have _lots_ of data and want to use _ElasticSearch's_ advanced distributed features.
+Because you have _lots_ of data and want to use _Elasticsearch's_ advanced distributed features.
 
-All good reasons to use _ElasticSearch_ as a schema-free and highly-scalable storage and retrieval/aggregation engine for your data.
+All good reasons to use _Elasticsearch_ as a schema-free and highly-scalable storage and retrieval/aggregation engine for your data.
 
 To use the persistence mode, we'll include the `Tire::Persistence` module in our class and define its properties;
 we can add the standard mapping declarations, set default values, or define casting for the property to create
@@ -747,7 +809,7 @@ and extensions to the core _Tire_ functionality — be sure to check them out.
 Other Clients
 -------------
 
-Check out [other _ElasticSearch_ clients](http://www.elasticsearch.org/guide/appendix/clients.html).
+Check out [other _Elasticsearch_ clients](http://www.elasticsearch.org/guide/clients/).
 
 
 Feedback
@@ -758,3 +820,5 @@ You can send feedback via [e-mail](mailto:karmi@karmi.cz) or via [Github Issues]
 -----
 
 [Karel Minarik](http://karmi.cz) and [contributors](http://github.com/karmi/tire/contributors)
+
+![](https://ga-beacon.appspot.com/UA-46901128-1/karmi/retire?pixel)

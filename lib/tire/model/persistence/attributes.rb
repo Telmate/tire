@@ -19,7 +19,7 @@ module Tire
           #      property :tags,      :analyzer => 'keywords', :default => []
           #    end
           #
-          # You can pass mapping definition for ElasticSearch in the options Hash.
+          # You can pass mapping definition for Elasticsearch in the options Hash.
           #
           # You can define default property values.
           #
@@ -46,14 +46,19 @@ module Tire
 
             # Save property default value (when relevant):
             unless (default_value = options.delete(:default)).nil?
-              property_defaults[name.to_sym] = default_value.respond_to?(:call) ? default_value.call : default_value
+              property_defaults[name.to_sym] = default_value
             end
 
             # Save property casting (when relevant):
             property_types[name.to_sym] = options[:class] if options[:class]
 
+            # Define default value for colletions:
+            if options[:class].is_a?(Array)
+              property_defaults[name.to_sym] ||= []
+            end
+
             # Store mapping for the property:
-            mapping[name] = options
+            mapping[name] = { :type => 'string' }.merge(options)
             self
           end
 
@@ -84,13 +89,22 @@ module Tire
           alias :_id= :id=
 
           def initialize(attributes={})
-            # Make a copy of objects in the property defaults hash, so default values such as `[]` or `{ foo: [] }` are left intact
+            # Make a copy of objects in the property defaults hash, so default values
+            # such as `[]` or `{ foo: [] }` are preserved.
+            #
             property_defaults = self.class.property_defaults.inject({}) do |hash, item|
               key, value = item
-              hash[key.to_s] = value.class.respond_to?(:new) ? value.clone : value
+
+              hash[key.to_sym] = if value.respond_to?(:call)
+                value.call
+              elsif value.class.respond_to?(:new)
+                value.clone
+              else
+                value
+              end
+
               hash
             end
-
             __update_attributes(property_defaults.merge(attributes))
           end
 
@@ -131,7 +145,7 @@ module Tire
 
               else
                 # Strings formatted as <http://en.wikipedia.org/wiki/ISO8601> are automatically converted to Time
-                value = Time.parse(value) if value.is_a?(String) && value =~ /^\d{4}[\/\-]\d{2}[\/\-]\d{2}T\d{2}\:\d{2}\:\d{2}Z$/
+                value = Time.parse(value).utc if value.is_a?(String) && value =~ /^\d{4}[\/\-]\d{2}[\/\-]\d{2}T\d{2}\:\d{2}\:\d{2}/
                 value
             end
           end

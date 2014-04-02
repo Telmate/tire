@@ -8,7 +8,7 @@ module Tire
       setup do
         begin; Object.send(:remove_const, :Rails); rescue; end
         Configuration.reset
-        @default_response = { 'hits' => { 'hits' => [{'_id' => 1, '_score' => 1, '_source' => {:title => 'Test'}},
+        @default_response = { 'hits' => { 'hits' => [{'_id' => 1, '_score' => 1, '_source' => {:title => 'Test', :author => 'John'}},
                                                      {'_id' => 2},
                                                      {'_id' => 3}],
                                           'max_score' => 1.0 } }
@@ -38,7 +38,7 @@ module Tire
         assert_equal [3],   Results::Collection.new(@default_response)[-1,1].map {|res| res[:id]}
       end
 
-      should "be initialized with parsed json" do
+      should "be initialized with parsed JSON" do
         assert_nothing_raised do
           collection = Results::Collection.new( @default_response )
           assert_equal 3, collection.results.count
@@ -69,7 +69,7 @@ module Tire
 
       should "be kaminari compatible" do
         collection = Results::Collection.new(@default_response)
-        %w(limit_value total_count num_pages offset_value first_page? last_page?).each do |method|
+        %w(limit_value total_count num_pages offset_value first_page? last_page? out_of_range?).each do |method|
           assert_respond_to collection, method
         end
       end
@@ -77,6 +77,28 @@ module Tire
       should "have max_score" do
         collection = Results::Collection.new(@default_response)
         assert_equal 1.0, collection.max_score
+      end
+
+      should "return an array" do
+        collection = Results::Collection.new(@default_response)
+        assert_instance_of Array, collection.to_ary
+      end
+
+      context "serialization" do
+
+        should "be serialized to JSON" do
+          collection = Results::Collection.new(@default_response)
+          assert_instance_of Array, collection.as_json
+          assert_equal 'Test', collection.as_json.first['title']
+          assert_equal 'John', collection.as_json.first['author']
+        end
+
+        should "pass options to as_json" do
+          collection = Results::Collection.new(@default_response)
+          assert_equal 'Test', collection.as_json(:only => 'title').first['title']
+          assert_nil           collection.as_json(:only => 'title').first['author']
+        end
+
       end
 
       context "with error response" do
@@ -198,6 +220,66 @@ module Tire
 
       end
 
+      context "using fields when also returning the _source" do
+        setup do
+          Configuration.reset
+          @default_response = { 'hits' => { 'hits' =>
+            [ { '_id' => 1, '_score' => 0.5, '_index' => 'testing', '_type' => 'article',
+                '_source' => {
+                  'title' => 'Knee Deep in JSON'
+                },
+                'fields' => {
+                  '_parent' => '4f99f98ea2b279ec3d002522'
+                }
+              }
+            ] } }
+          collection = Results::Collection.new(@default_response)
+          @item      = collection.first
+        end
+
+        should "return an individual field" do
+          assert_equal '4f99f98ea2b279ec3d002522', @item._parent
+        end
+
+        should "return fields from the _source as well" do
+          assert_equal 'Knee Deep in JSON', @item.title
+        end
+      end
+
+      context "returning results with hits" do
+        should "yield the Item result and the raw hit" do
+          response = { 'hits' => { 'hits' => [ { '_id' => 1, '_score' => 0.5, '_index' => 'testing', '_type' => 'article', '_source' => { :title => 'Test', :body => 'Lorem' } } ] } }
+
+          Results::Collection.new(response).each_with_hit do |result, hit|
+            assert_instance_of Tire::Results::Item, result
+            assert_instance_of Hash, hit
+            assert_equal 'Test',   result.title
+            assert_equal 0.5, hit['_score']
+          end
+        end
+
+        should "yield the model instance and the raw hit" do
+          response = { 'hits' => { 'hits' => [ {'_id' => 1, '_score' => 0.5, '_type' => 'active_record_article'} ] } }
+
+          ActiveRecord::Base.establish_connection( :adapter => 'sqlite3', :database => ":memory:" )
+          ActiveRecord::Migration.verbose = false
+          ActiveRecord::Schema.define(:version => 1) { create_table(:active_record_articles) { |t| t.string(:title) } }
+          model = ActiveRecordArticle.new(:title => 'Test'); model.id = 1
+
+          ActiveRecordArticle.expects(:find).with([1]).returns([ model] )
+
+          Results::Collection.new(response, :load => true).each_with_hit do |result, hit|
+            assert_instance_of ActiveRecordArticle, result
+            assert_instance_of Hash, hit
+            assert_equal 'Test',   result.title
+            assert_equal 0.5, hit['_score']
+          end
+
+        end
+
+
+      end
+
       context "while paginating results" do
 
         setup do
@@ -311,7 +393,38 @@ module Tire
           assert @collection.results.empty?, 'Collection results should be empty'
           assert_equal 0, @collection.size
         end
+      end
 
+      context "with ActiveModel::Serializers" do
+        setup do
+          require 'active_model_serializers'
+
+          Tire::Results::Collection.send :include, ActiveModel::ArraySerializerSupport
+
+          class ::MyItemWithSerializer < Tire::Results::Item
+            include ActiveModel::SerializerSupport
+
+            def active_model_serializer
+              ::MyItemSerializer
+            end
+          end
+
+          class ::MyItemSerializer < ActiveModel::Serializer
+            attribute :title,  :key => :name
+            attribute :author, :key => :owner
+          end
+        end
+
+        should "be serializable" do
+          assert_nothing_raised do
+            collection = Results::Collection.new(@default_response, :wrapper => ::MyItemWithSerializer)
+            serializer = collection.active_model_serializer.new(collection)
+
+            hash = serializer.as_json.first
+            assert_equal 'Test',    hash[:name]
+            assert_equal 'John', hash[:owner]
+          end
+        end
       end
 
     end

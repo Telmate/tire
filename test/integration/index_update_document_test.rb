@@ -23,12 +23,12 @@ module Tire
       teardown { Tire.index('articles-with-tags').delete }
 
       should "increment a counter" do
-        Tire.index('articles-with-tags') { update( 'article', '1', :script => "ctx._source.views += 1" ) and refresh }
+        Tire.index('articles-with-tags') { update( 'article', '1', {:script => "ctx._source.views += 1"}, :refresh => true) }
 
         document = Tire.search('articles-with-tags') { query { string 'title:one' } }.results.first
         assert_equal 1, document.views, document.inspect
 
-        Tire.index('articles-with-tags') { update( 'article', '2', :script => "ctx._source.views += 1" ) and refresh }
+        Tire.index('articles-with-tags') { update( 'article', '2', {:script => "ctx._source.views += 1"}, :refresh => true) }
 
         document = Tire.search('articles-with-tags') { query { string 'title:two' } }.results.first
         assert_equal 11, document.views, document.inspect
@@ -36,9 +36,13 @@ module Tire
 
       should "add a tag to document" do
         Tire.index('articles-with-tags') do
-          update 'article', '1', :script => "ctx._source.tags += tag",
-                                 :params => { :tag => 'new' }
-          refresh
+          update 'article', '1', {
+              :script => "ctx._source.tags += tag",
+              :params => { :tag => 'new' }
+            },
+            {
+              :refresh => true
+            }
         end
 
         document = Tire.search('articles-with-tags') { query { string 'title:one' } }.results.first
@@ -47,9 +51,12 @@ module Tire
 
       should "remove a tag from document" do
         Tire.index('articles-with-tags') do
-          update 'article', '1', :script => "ctx._source.tags = tags",
-                                 :params => { :tags => [] }
-          refresh
+          update 'article', '1', {
+              :script => "ctx._source.tags = tags",
+              :params => { :tags => [] }
+            }, {
+              :refresh => true
+            }
         end
 
         document = Tire.index('articles-with-tags').retrieve 'article', '1'
@@ -59,9 +66,12 @@ module Tire
       should "remove the entire document if specific condition is met" do
         Tire.index('articles-with-tags') do
           # Remove document when it contains tag 'foobar'
-          update 'article', '3', :script => "ctx._source.tags.contains(tag) ? ctx.op = 'delete' : 'none'",
-                                 :params => { :tag => 'foobar' }
-          refresh
+          update 'article', '3', {
+              :script => "ctx._source.tags.contains(tag) ? ctx.op = 'delete' : 'none'",
+              :params => { :tag => 'foobar' }
+            }, {
+              :refresh => true
+            }
         end
 
         assert_nil Tire.index('articles-with-tags').retrieve 'article', '3'
@@ -79,6 +89,15 @@ module Tire
         assert_equal 3, document.tags.size, document.inspect
       end
 
+      should "update the document with a partial one" do
+        Tire.index('articles-with-tags') do
+          update( 'article', '1', {:doc => { :title => 'One UPDATED' }}, :refresh => true )
+        end
+
+        document = Tire.search('articles-with-tags') { query { string 'title:one' } }.results.first
+        assert_equal 'One UPDATED', document.title, document.inspect
+      end
+
       should "access variables from the outer scope" do
         $t = self
 
@@ -91,9 +110,12 @@ module Tire
             Tire.index('articles-with-tags') do |index|
               $t.assert_not_nil @tags
 
-              index.update 'article', '3', :script => "ctx._source.tags = tags",
-                                     :params => { :tags => @tags }
-              index.refresh
+              index.update 'article', '3', {
+                  :script => "ctx._source.tags = tags",
+                  :params => { :tags => @tags }
+                }, {
+                  :refresh => true
+                }
             end
           end
         end
@@ -105,7 +127,5 @@ module Tire
       end
 
     end
-
   end
-
 end

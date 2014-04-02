@@ -32,6 +32,10 @@ module Tire
         create_table :active_record_class_with_dynamic_index_names do |t|
           t.string     :title
         end
+        create_table :active_record_model_with_percolations do |t|
+          t.string   :title
+          t.datetime :created_at, :default => 'NOW()'
+        end
       end
     end
 
@@ -130,6 +134,20 @@ module Tire
           assert_equal ActiveRecordArticle.find(1), results.first
         end
 
+        should "load single record" do
+          a = ActiveRecordArticle.create :title => 'foo'
+          a.save
+          a.index.refresh
+
+          results = ActiveRecordArticle.search load: true do
+            query { string 'title:foo' }
+          end
+
+          assert_instance_of ActiveRecordArticle, results.first
+          assert_equal 'foo', results.first.title
+          assert_equal 3, a.length # Make sure we have the "real model"
+        end
+
         should "load records with options on query search" do
           assert_equal ActiveRecordArticle.find(['1'], :include => 'comments').first,
                        ActiveRecordArticle.search('"Test 1"',
@@ -143,6 +161,29 @@ module Tire
             end
             assert_equal 0, results.size
             assert ! results.any?
+          end
+        end
+
+        should "iterate results with hits" do
+          results = ActiveRecordArticle.search :load => true do
+            query { string '"Test 1" OR "Test 2"' }
+          end
+          results.each_with_hit do |result, hit|
+            assert_instance_of ActiveRecordArticle, result
+            assert_instance_of Hash, hit
+            assert_match /Test \d/, result.title
+            assert_match /Test \d/, hit['_source']['title']
+            assert hit['_score'] > 0
+          end
+        end
+
+        should "provide access to highlighted fields in hit" do
+          results = ActiveRecordArticle.search :load => true do
+            query { string '"Test 1" OR "Test 2"' }
+            highlight :title
+          end
+          results.each_with_hit do |result, hit|
+            assert_equal 1, hit['highlight']['title'].size
           end
         end
       end
@@ -280,6 +321,16 @@ module Tire
               assert_equal nil, results.next_page
 
               assert_nil results.first
+            end
+
+            should "find second page with four loaded models" do
+              results = ActiveRecordArticle.search :load => true, :page => 2, :per_page => 5 do |search|
+                search.query { |query| query.string @q }
+                search.sort  { by :title }
+              end
+              assert_equal 4, results.size
+              assert results.all? { |r| assert_instance_of ActiveRecordArticle, r }
+              assert_equal 'Test6', results.first.title
             end
 
           end
@@ -558,6 +609,40 @@ module Tire
         end
 
       end
+
+      context "percolated search" do
+        setup do
+          delete_registered_queries
+          delete_percolator_index if ENV['TRAVIS']
+          ActiveRecordModelWithPercolation.index.register_percolator_query('alert') { string 'warning' }
+          Tire.index('_percolator').refresh
+        end
+
+        teardown do
+          ActiveRecordModelWithPercolation.index.unregister_percolator_query('alert') { string 'warning' }
+        end
+
+        should "return matching queries when percolating" do
+          a = ActiveRecordModelWithPercolation.new :title => 'Warning!'
+          assert_contains a.percolate, 'alert'
+        end
+
+        should "return matching queries when saving" do
+          a = ActiveRecordModelWithPercolation.create! :title => 'Warning!'
+          assert_contains a.matches, 'alert'
+        end
+      end
+
+    end
+
+    private
+
+    def delete_registered_queries
+      Configuration.client.delete("#{Configuration.url}/_percolator/active_record_model_with_percolations/alert") rescue nil
+    end
+
+    def delete_percolator_index
+      Configuration.client.delete("#{Configuration.url}/_percolator") rescue nil
     end
 
   end

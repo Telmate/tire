@@ -7,13 +7,16 @@ module Tire
 
     def setup
       super
-      PersistentArticle.index.delete
+      PersistentArticle.create_elasticsearch_index
+      PersistentArticleWithDefaults.create_elasticsearch_index
+      PersistentArticleWithStrictMapping.create_elasticsearch_index
     end
 
     def teardown
       super
       PersistentArticle.index.delete
       PersistentArticleWithDefaults.index.delete
+      PersistentArticleWithStrictMapping.index.delete
     end
 
     context "PersistentModel" do
@@ -73,6 +76,23 @@ module Tire
         results = PersistentArticleWithDefaults.all
 
         assert_equal [], results.first.tags
+      end
+
+      context "with deleting" do
+        should "search with simple query" do
+          PersistentArticle.create :id => 1, :title => 'One'
+          PersistentArticle.index.refresh
+
+          results = PersistentArticle.search 'one'
+          assert_equal 1, results.size
+
+          PersistentArticle.delete do
+            term :title, 'one'
+          end
+
+          results = PersistentArticle.search 'one'
+          assert_equal 0, results.size
+        end
       end
 
       context "with pagination" do
@@ -182,6 +202,58 @@ module Tire
         end
       end
 
+      context "percolated search" do
+        setup do
+          delete_registered_queries
+          delete_percolator_index
+          PersistentArticleWithPercolation.index.register_percolator_query('alert') { string 'warning' }
+          Tire.index('_percolator').refresh
+        end
+
+        teardown do
+          PersistentArticleWithPercolation.index.unregister_percolator_query('alert') { string 'warning' }
+        end
+
+        should "return matching queries when percolating" do
+          a = PersistentArticleWithPercolation.new :title => 'Warning!'
+          assert_contains a.percolate, 'alert'
+        end
+
+        should "return matching queries when saving" do
+          a = PersistentArticleWithPercolation.create :title => 'Warning!'
+          assert_contains a.matches, 'alert'
+        end
+      end if ENV['TRAVIS']
+
+      context "with strict mapping" do
+        should "successfuly save valid model" do
+          a = PersistentArticleWithStrictMapping.create :title => 'Test'
+          assert a.save
+        end
+        should "return false when creating fails" do
+          a = PersistentArticleWithStrictMapping.create :created => 'NOTVALID'
+          assert_equal false, a
+        end
+        should "return false when saving fails for invalid format" do
+          a = PersistentArticleWithStrictMapping.new :created => 'NOTVALID'
+          assert_equal false, a.save
+        end
+        should "return false when saving fails for unmapped property" do
+          a = PersistentArticleWithStrictMapping.new :myproperty => true
+          assert_equal false, a.save
+        end
+      end
+
+    end
+
+    private
+
+    def delete_registered_queries
+      Configuration.client.delete("#{Configuration.url}/_percolator/persistent_article_with_percolations/alert") rescue nil
+    end
+
+    def delete_percolator_index
+      Configuration.client.delete("#{Configuration.url}/_percolator") rescue nil
     end
 
   end

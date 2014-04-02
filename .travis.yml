@@ -5,9 +5,10 @@
 language: ruby
 
 rvm:
-  - 1.9.3
   - 1.8.7
-  - ree
+  - 1.9.3
+  - 2.0.0
+  - jruby-19mode
 
 env:
   - TEST_COMMAND="rake test:unit"
@@ -15,14 +16,14 @@ env:
 
 script: "bundle exec $TEST_COMMAND"
 
-before_install:
-  - sudo service elasticsearch start
+services:
+  - elasticsearch
+  - redis
+  - mongodb
 
 matrix:
   exclude:
     - rvm: 1.8.7
-      env: TEST_COMMAND="rake test:integration"
-    - rvm: ree
       env: TEST_COMMAND="rake test:integration"
 
 notifications:

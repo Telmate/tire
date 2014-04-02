@@ -5,16 +5,17 @@ module Tire
       include Enumerable
       include Pagination
 
-      attr_reader :time, :total, :options, :facets, :max_score
+      attr_reader :time, :total, :options, :facets, :max_score, :suggestions
 
       def initialize(response, options={})
-        @response  = response
-        @options   = options
-        @time      = response['took'].to_i
-        @total     = response['hits']['total'].to_i rescue nil
-        @facets    = response['facets']
-        @max_score = response['hits']['max_score'].to_f rescue nil
-        @wrapper   = options[:wrapper] || Configuration.wrapper
+        @response    = response
+        @options     = options
+        @time        = response['took'].to_i
+        @total       = response['hits']['total'].to_i rescue nil
+        @facets      = response['facets']
+        @suggestions = Suggestions.new(response['suggest']) if response['suggest']
+        @max_score   = response['hits']['max_score'].to_f rescue nil
+        @wrapper     = options[:wrapper] || Configuration.wrapper
       end
 
       def results
@@ -29,8 +30,18 @@ module Tire
         end
       end
 
+      # Iterates over the `results` collection
+      #
       def each(&block)
         results.each(&block)
+      end
+
+      # Iterates over the `results` collection and yields
+      # the `result` object (Item or model instance) and the
+      # `hit` -- raw Elasticsearch response parsed as a Hash
+      #
+      def each_with_hit(&block)
+        results.zip(@response['hits']['hits']).each(&block)
       end
 
       def empty?
@@ -47,6 +58,14 @@ module Tire
       end
       alias :[] :slice
 
+      def to_ary
+        results
+      end
+
+      def as_json(options=nil)
+        to_a.map { |item| item.as_json(options) }
+      end
+
       def error
         @response['error']
       end
@@ -57,10 +76,6 @@ module Tire
 
       def failure?
         ! success?
-      end
-
-      def to_ary
-        self
       end
 
       # Handles _source prefixed fields properly: strips the prefix and converts fields to nested Hashes
@@ -92,12 +107,17 @@ module Tire
           hits.map do |h|
             document = {}
 
-            # Update the document with content and ID
-            document = h['_source'] ? document.update( h['_source'] || {} ) : document.update( __parse_fields__(h['fields']) )
-            document.update( {'id' => h['_id']} )
+            # Update the document with fields and/or source
+            document.update h['_source'] if h['_source']
+            document.update __parse_fields__(h['fields']) if h['fields']
+
+            # Set document ID
+            document['id'] = h['_id']
 
             # Update the document with meta information
-            ['_score', '_type', '_index', '_version', 'sort', 'highlight', '_explanation'].each { |key| document.update( {key => h[key]} || {} ) }
+            ['_score', '_type', '_index', '_version', 'sort', 'highlight', '_explanation'].each do |key|
+              document.update key => h[key]
+            end
 
             # Return an instance of the "wrapper" class
             @wrapper.new(document)
@@ -122,7 +142,7 @@ module Tire
                              "based on _type '#{type}'.", e.backtrace
           end
 
-          records[type] = __find_records_by_ids klass, items.map { |h| h['_id'] }
+          records[type] = Array(__find_records_by_ids klass, items.map { |h| h['_id'] })
         end
 
         # Reorder records to preserve the order from search results
@@ -136,7 +156,6 @@ module Tire
       def __find_records_by_ids(klass, ids)
         @options[:load] === true ? klass.find(ids) : klass.find(ids, @options[:load])
       end
-
     end
 
   end

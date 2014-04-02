@@ -1,9 +1,9 @@
 # encoding: UTF-8
 #
 # **Tire** provides rich and comfortable Ruby API for the
-# [_ElasticSearch_](http://www.elasticsearch.org/) search engine/database.
+# [_Elasticsearch_](http://www.elasticsearch.org/) search engine/database.
 #
-# _ElasticSearch_ is a scalable, distributed, cloud-ready, highly-available
+# _Elasticsearch_ is a scalable, distributed, cloud-ready, highly-available
 # full-text search engine and database, communicating by JSON over RESTful HTTP,
 # based on [Lucene](http://lucene.apache.org/), written in Java.
 #
@@ -40,14 +40,14 @@ require 'tire'
 
 #### Prerequisites
 
-# We'll need a working and running _ElasticSearch_ server, of course. Thankfully, that's easy.
+# We'll need a working and running _Elasticsearch_ server, of course. Thankfully, that's easy.
 ( puts <<-"INSTALL" ; exit(1) ) unless (RestClient.get('http://localhost:9200') rescue false)
 
- [ERROR] You don’t appear to have ElasticSearch installed. Please install and launch it with the following commands:
+ [ERROR] You don’t appear to have Elasticsearch installed. Please install and launch it with the following commands:
 
- curl -k -L -o elasticsearch-0.19.0.tar.gz http://github.com/downloads/elasticsearch/elasticsearch/elasticsearch-0.19.0.tar.gz
- tar -zxvf elasticsearch-0.19.0.tar.gz
- ./elasticsearch-0.19.0/bin/elasticsearch -f
+ curl -k -L -o elasticsearch-0.20.2.tar.gz http://github.com/downloads/elasticsearch/elasticsearch/elasticsearch-0.20.2.tar.gz
+ tar -zxvf elasticsearch-0.20.2.tar.gz
+ ./elasticsearch-0.20.2/bin/elasticsearch -f
 INSTALL
 
 ### Storing and indexing documents
@@ -68,7 +68,7 @@ Tire.index 'articles' do
   store :title => 'One',   :tags => ['ruby'],           :published_on => '2011-01-01'
   store :title => 'Two',   :tags => ['ruby', 'python'], :published_on => '2011-01-02'
 
-  # We usually want to set a specific _type_ for the document in _ElasticSearch_.
+  # We usually want to set a specific _type_ for the document in _Elasticsearch_.
   # Simply setting a `type` property is OK.
   #
   store :type => 'article',
@@ -121,6 +121,8 @@ end
 # for the index.
 
 Tire.index 'articles' do
+  delete
+
   # To do so, let's just pass a Hash containing the specified mapping to the `Index#create` method.
   #
   create :mappings => {
@@ -135,7 +137,7 @@ Tire.index 'articles' do
         #
         :id       => { :type => 'string', :index => 'not_analyzed', :include_in_all => false },
 
-        # ... set the boost or analyzer settings for the field, etc. The _ElasticSearch_ guide
+        # ... set the boost or analyzer settings for the field, etc. The _Elasticsearch_ guide
         # has [more information](http://elasticsearch.org/guide/reference/mapping/index.html).
         # Don't forget, that proper mapping is key to efficient and effective search.
         # But don't fret about getting the mapping right the first time, you won't.
@@ -152,7 +154,7 @@ end
 #### Bulk Indexing
 
 # Of course, we may have large amounts of data, and adding them to the index one by one really isn't the best idea.
-# We can use _ElasticSearch's_ [bulk API](http://www.elasticsearch.org/guide/reference/api/bulk.html)
+# We can use _Elasticsearch's_ [bulk API](http://www.elasticsearch.org/guide/reference/api/bulk.html)
 # for importing the data.
 
 # So, for demonstration purposes, let's suppose we have a simple collection of hashes to store.
@@ -179,8 +181,6 @@ end
 # Of course, we can easily manipulate the documents before storing them in the index.
 #
 Tire.index 'articles' do
-  delete
-
   # ... by passing a block to the `import` method. The collection will
   # be available in the block argument.
   #
@@ -197,7 +197,7 @@ end
 
 ### Searching
 
-# With the documents indexed and stored in the _ElasticSearch_ database, we can search them, finally.
+# With the documents indexed and stored in the _Elasticsearch_ database, we can search them, finally.
 #
 # _Tire_ exposes the search interface via simple domain-specific language.
 
@@ -289,7 +289,7 @@ end
 # We may use any valid [Lucene query syntax](http://lucene.apache.org/java/3_0_3/queryparsersyntax.html)
 # for the `query_string` queries.
 
-# For debugging our queries, we can display the JSON which is being sent to _ElasticSearch_.
+# For debugging our queries, we can display the JSON which is being sent to _Elasticsearch_.
 #
 #     {"query":{"query_string":{"query":"title:T*"}}}
 #
@@ -342,7 +342,7 @@ end
 #
 Tire.configure do
 
-  # First of all, we can configure the URL for _ElasticSearch_.
+  # First of all, we can configure the URL for _Elasticsearch_.
   #
   url "http://search.example.com"
 
@@ -362,7 +362,7 @@ end
 ### Complex Searching
 
 # Query strings are convenient for simple searches, but we may want to define our queries more expressively,
-# using the _ElasticSearch_ [Query DSL](http://www.elasticsearch.org/guide/reference/query-dsl/index.html).
+# using the _Elasticsearch_ [Query DSL](http://www.elasticsearch.org/guide/reference/query-dsl/index.html).
 #
 s = Tire.search('articles') do
 
@@ -471,7 +471,7 @@ Tire.search('articles') do
   end
 end
 
-# _ElasticSearch_ supports many types of [queries](http://www.elasticsearch.org/guide/reference/query-dsl/).
+# _Elasticsearch_ supports many types of [queries](http://www.elasticsearch.org/guide/reference/query-dsl/).
 #
 # Eventually, _Tire_ will support all of them. So far, only these are supported:
 #
@@ -487,7 +487,7 @@ end
 
 #### Faceted Search
 
-# _ElasticSearch_ makes it trivial to retrieve complex aggregated data from our index/database,
+# _Elasticsearch_ makes it trivial to retrieve complex aggregated data from our index/database,
 # so called [_facets_](http://www.elasticsearch.org/guide/reference/api/search/facets/index.html).
 
 # Let's say we want to display article counts for every tag in the database.
@@ -579,7 +579,7 @@ s.results.facets['global-tags']['terms'].each do |f|
   puts "#{f['term'].ljust(10)} #{f['count']}"
 end
 
-# _ElasticSearch_ supports many advanced types of facets, such as those for computing statistics or geographical distance.
+# _Elasticsearch_ supports many advanced types of facets, such as those for computing statistics or geographical distance.
 #
 # Eventually, _Tire_ will support all of them. So far, only these are supported:
 #
@@ -591,7 +591,7 @@ end
 # * [terms_stats](http://www.elasticsearch.org/guide/reference/api/search/facets/terms-stats-facet.html)
 # * [query](http://www.elasticsearch.org/guide/reference/api/search/facets/query-facet.html)
 
-# We have seen that _ElasticSearch_ facets enable us to fetch complex aggregations from our data.
+# We have seen that _Elasticsearch_ facets enable us to fetch complex aggregations from our data.
 #
 # They are frequently used for another feature, „faceted navigation“.
 # We can be combine query and facets with
@@ -710,6 +710,7 @@ s = Tire.search 'articles' do
 end
 
 # The results:
+#
 #     * One         (Published on: 2011-01-01)
 #     * Two         (Published on: 2011-01-02)
 #     * Three       (Published on: 2011-01-02)
@@ -719,10 +720,64 @@ s.results.each do |document|
   puts "* #{ document.title.ljust(10) }  (Published on: #{ document.published_on })"
 end
 
+#### Nested Documents and Queries
+
+# Often, we want to store more complex entities in _Elasticsearch_;
+# for example, we may want to store the information about comments for each article,
+# and then search for articles where a certain person left a certain note.
+
+# In the simplest case, we can store the comments as an Array of JSON documents in the
+# article document. If we do that naively, our search results will be incorrect, though.
+# That's because a match in just one field will be enough to match a document.
+# We need to query parts of the document as if they were separate entities.
+
+# _Elasticsearch_ provides a specific `nested`
+# [field type](http://www.elasticsearch.org/guide/reference/mapping/nested-type.html) and
+# [query](http://www.elasticsearch.org/guide/reference/query-dsl/nested-query.html)
+# for working with "embedded" documents like these.
+
+# So, let's update the mapping for the index first, adding the `comments` property as a `nested` type:
+#
+Tire::Configuration.client.put Tire.index('articles').url+'/article/_mapping',
+                               { :article => { :properties => { :comments => { :type => 'nested' } } } }.to_json
+
+# And let's add comments to articles (notice that both articles contain a comment with the _Cool!_ message,
+# though by different authors):
+#
+Tire.index 'articles' do
+  update :article, 1,
+         :doc => { :comments => [ { :author => 'John', :message => 'Great!' }, { :author => 'Bob', :message => 'Cool!' } ]   }
+  update :article, 2,
+         :doc => { :comments => [ { :author => 'John', :message => 'Cool!' }, { :author => 'Mary', :message => 'Thanks!' } ] }
+  refresh
+end
+
+# We'll use the `nested` query to search for articles where _John_ left a _"Cool"_ message:
+#
+s = Tire.search 'articles' do
+  query do
+    nested :path => 'comments' do
+      query do
+        match 'comments.author',  'John'
+        match 'comments.message', 'cool'
+      end
+    end
+  end
+end
+
+# The results contain just the second document, correctly:
+#
+#     * Two (comments: 2)
+#
+s.results.each do |document|
+  puts "* #{ document.title } (comments: #{document.comments.size})"
+end
+
+
 #### Highlighting
 
 # Often, we want to highlight the snippets matching our query in the displayed results.
-# _ElasticSearch_ provides rich
+# _Elasticsearch_ provides rich
 # [highlighting](http://www.elasticsearch.org/guide/reference/api/search/highlighting.html)
 # features, and _Tire_ makes them trivial to use.
 #
@@ -731,7 +786,7 @@ s = Tire.search 'articles' do
   # Let's search for documents containing word “Two” in their titles,
   query { string 'title:Two' }
 
-   # and instruct _ElasticSearch_ to highlight relevant snippets.
+   # and instruct _Elasticsearch_ to highlight relevant snippets.
    #
   highlight :title
 end
@@ -761,9 +816,159 @@ s = Tire.search 'articles' do
   highlight :title, :body, :options => { :tag => '<strong class="highlight">' }
 end
 
+#### Suggest
+
+#
+# _Elasticsearch_
+# [suggest](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-suggesters.html)
+# feature suggests similar terms based on user input.
+# You can specify either the `term` or `phrase` suggester in the Tire DSL, or
+# use the `completion` suggester to get fast completions of user inputs, suitable
+# for auto-complete and instant search features.
+
+# Suggestion API is available either as standalone method or part of the search request.
+
+# To get search suggestions while doing a search, call the suggest API
+#
+s = Tire.search 'articles' do
+
+  # To define a suggest using the term suggester, first provide a custom name for the suggest.
+  #
+  suggest :suggest_title do
+    # Specify the input text.
+    #
+    text 'thrree blind mice'
+    # Then, define the field you want to use for suggestions and any options.
+    #
+    term :title, size: 3, sort: 'frequency'
+  end
+
+  # To define a suggest using the `phrase` suggest, use a different name.
+  suggest :phrase_suggest_title do
+    # Specify the text input text.
+    #
+    text 'thrree blind mice'
+    # Again, define the field you want to use for suggestions and any options.
+    #
+    phrase :title, size: 3 do
+      # Optinally, configure the `smoothing` option...
+      #
+      smoothing :stupid_backoff, discount: 0.5
+
+      # ...or the `generator` option.
+      generator :title, min_word_len: 1
+    end
+  end
+end
+
+# The results will be available in the `suggestions` property (which is iterable)
+#
+s.results.suggestions.each do |name, options|
+  puts "Suggestion returned for #{name}:\n"
+  options.each do |option|
+    puts "* Raw result: #{option}"
+  end
+end
+
+# You can also use helper methods available in suggestions results to get only
+# the suggested terms or phrases.
+#
+puts "Available corrections for suggest_title: #{s.results.suggestions.texts(:suggest_title).join(', ')}"
+
+# You can use the standalone API to achieve the same result:
+#
+s = Tire.suggest('articles') do
+
+  # Notice that for standalone API, the block method is `suggestion` rather than `suggest`:
+  #
+  suggestion :term_suggest do
+    text 'thrree'
+    term :title, size: 3, sort: 'frequency'
+  end
+
+end
+
+# You'll get the same object as above but as top level object
+#
+puts "Available corrections: #{s.results.texts.join(', ')}"
+
+#### Completion
+
+# In order to use _Elasticsearch_ completion you'll need to update your mappings to provide a field
+# with completion type. The example is adapted from this
+# [blog post](http://www.elasticsearch.org/blog/you-complete-me/).
+#
+index = Tire.index('hotels') do
+  delete
+
+  # Notice the type completion for the field _name_suggest_:
+  #
+  create :mappings => {
+      :hotel => {
+          :properties => {
+              :name => {:type => 'string'},
+              :city => {:type => 'string'},
+              :name_suggest => {:type => 'completion'}
+          }
+      }
+  }
+
+  # Let's add some documents into this index:
+  #
+  import([
+             {:id => '1', :type => 'hotel', :name => 'Mercure Hotel Munich', :city => 'Munich', :name_suggest => 'Mercure Hotel Munich'},
+             {:id => '2', :type => 'hotel', :name => 'Hotel Monaco', :city => 'Munich', :name_suggest => 'Hotel Monaco'},
+         ])
+  refresh
+
+end
+
+# We can ask for all hotels starting with a given prefix (such as "m") with this query:
+#
+s = Tire.suggest('hotels') do
+  suggestion 'complete' do
+    text 'm'
+    completion 'name_suggest'
+  end
+end
+
+# And retrieve results as above with the same object:
+#
+puts "There are #{s.results.texts.size} hotels starting with m:"
+s.results.texts.each do |hotel|
+  puts "* #{hotel}"
+end
+
+# You can use some advanced features of completion such as multiple inputs and unified output for
+# the same document.
+
+# If you add a document which has inputs and output values for the suggest field:
+#
+index.store({:id => '1', :type => 'hotel', :name => 'Mercure Hotel Munich', :city => 'Munich',
+             :name_suggest => {:input => ['Mercure Hotel Munich', 'Mercure Munich'], :output => 'Hotel Mercure'}})
+index.store({:id => '2', :type => 'hotel', :name => 'Hotel Monaco', :city => 'Munich',
+             :name_suggest => {:input => ['Monaco Munich', 'Hotel Monaco'], :output => 'Hotel Monaco'}})
+index.refresh
+
+# ... a completion request with the same input as above ...
+#
+s = Tire.suggest('hotels') do
+  suggestion 'complete' do
+    text 'm'
+    completion 'name_suggest'
+  end
+end
+
+# ... will match multiple inputs for the same document and return unified output in results:
+#
+puts "There are #{s.results.texts.size} hotels starting with m:"
+s.results.texts.each do |hotel|
+  puts "* #{hotel}"
+end
+
 #### Percolation
 
-# _ElasticSearch_ comes with one very interesting, and rather unique feature:
+# _Elasticsearch_ comes with one very interesting, and rather unique feature:
 # [_percolation_](http://www.elasticsearch.org/guide/reference/api/percolate.html).
 
 # It works in a „reverse search“ manner to regular search workflow of adding
@@ -793,7 +998,7 @@ index = Tire.index('weather') do
 end
 
 # Notice, that we have added a _tags_ field to the query document, because it behaves
-# just like any other document in _ElasticSearch_.
+# just like any other document in _Elasticsearch_.
 
 # We will refresh the `_percolator` index for immediate access.
 #
@@ -809,7 +1014,7 @@ matches = index.percolate(:message => '[Warning] Extreme flooding expected after
 #
 puts "Matching queries: " + matches.inspect
 
-# We can filter the executed queries with a regular _ElasticSearch_ query passed as a block to
+# We can filter the executed queries with a regular _Elasticsearch_ query passed as a block to
 # the `percolate` method.
 #
 matches = index.percolate(:message => '[Warning] Extreme flooding expected after tsunami wave.') do
@@ -839,7 +1044,8 @@ puts "Matching queries: " + matches.inspect
 
 # Let's store a document with some trigger words in the index, and mark it for percolation.
 #
-response = index.store :message => '[Warning] Severe floods expected after tsunami wave.', :percolate => true
+response = index.store( { :message => '[Warning] Severe floods expected after tsunami wave.' },
+                        { :percolate => true } )
 
 # We will get the names of all matching queries in response.
 #
@@ -849,9 +1055,9 @@ puts "Matching queries: " + response['matches'].inspect
 
 # As with the _percolate_ example, we can filter the executed queries.
 #
-response = index.store :message => '[Warning] Severe floods expected after tsunami wave.',
-                       # Let's use a simple string query for the “tsunami” tag.
-                       :percolate => 'tags:tsunami'
+response = index.store( { :message => '[Warning] Severe floods expected after tsunami wave.' },
+                         # Let's use a simple string query for the “tsunami” tag.
+                        { :percolate => 'tags:tsunami' } )
 
 # Unsurprisingly, the response will contain just the name of the “tsunami” query.
 #
@@ -862,7 +1068,7 @@ puts "Matching queries: " + response['matches'].inspect
 ### ActiveModel Integration
 
 # As you can see, [_Tire_](https://github.com/karmi/tire) supports the
-# main features of _ElasticSearch_ in Ruby.
+# main features of _Elasticsearch_ in Ruby.
 #
 # It allows you to create and delete indices, add documents, search them, retrieve the facets, highlight the results,
 # and comes with a usable logging facility.

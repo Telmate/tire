@@ -1,7 +1,7 @@
 module Tire
   module Model
 
-    # Allows to use _ElasticSearch_ as a primary database (storage).
+    # Allows to use _Elasticsearch_ as a primary database (storage).
     #
     # Contains all the `Tire::Model::Search` features and provides
     # an [_ActiveModel_](http://rubygems.org/gems/activemodel)-compatible
@@ -36,14 +36,12 @@ module Tire
           extend  ActiveModel::Callbacks
           define_model_callbacks :save, :destroy
 
-          include Tire::Model::Search
-          include Tire::Model::Callbacks
-
           extend  Persistence::Finders::ClassMethods
           extend  Persistence::Attributes::ClassMethods
           include Persistence::Attributes::InstanceMethods
-
           include Persistence::Storage
+
+          include Tire::Model::Search
 
           ['_score', '_type', '_index', '_version', 'sort', 'highlight', '_explanation'].each do |attr|
             define_method("#{attr}=") { |value| @attributes ||= {}; @attributes[attr] = value }

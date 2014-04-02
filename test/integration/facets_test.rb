@@ -70,8 +70,19 @@ module Tire
           assert_equal 1,      s.results.facets.size
           assert_equal 'ruby', s.results.facets['tags']['terms'].first['term']
           assert_equal 1,      s.results.facets['tags']['terms'].first['count'].to_i
-        end
+      end
 
+      should "allow arbitrary order of methods in the DSL block" do
+          s = Tire.search('articles-test', :search_type => 'count') do
+            facet 'tags' do
+              facet_filter :range, { :published_on => { :from => '2011-01-01', :to => '2011-01-01' } }
+              terms :tags
+            end
+          end
+
+          assert_equal 1,      s.results.facets.size
+          assert_equal 'ruby', s.results.facets['tags']['terms'].first['term']
+          assert_equal 1,      s.results.facets['tags']['terms'].first['count'].to_i
       end
 
       context "terms" do
@@ -103,7 +114,7 @@ module Tire
 
       context "date histogram" do
 
-        should "return aggregated values for all results" do
+        should "return aggregated counts for each bucket" do
           s = Tire.search('articles-test') do
             query { all }
             facet 'published_on' do
@@ -113,7 +124,35 @@ module Tire
 
           facets = s.results.facets['published_on']['entries']
           assert_equal 4, facets.size, facets.inspect
-          assert_equal 2, facets.entries[1]["count"], facets.inspect
+          assert_equal 2, facets.entries[1]['count'], facets.inspect
+        end
+
+        should "return value statistics for each bucket" do
+          s = Tire.search('articles-test', search_type: 'count') do
+            query { all }
+            facet 'published_on' do
+              date :published_on, value_field: 'words'
+            end
+          end
+
+          facets = s.results.facets['published_on']['entries']
+          assert_equal 4, facets.size, facets.inspect
+          assert_equal 2, facets.entries[1]['count'], facets.inspect
+          assert_equal 625.0, facets.entries[1]['total'], facets.inspect
+        end
+
+        should "return value statistics for each bucket by script" do
+          s = Tire.search('articles-test', search_type: 'count') do
+            query { all }
+            facet 'published_on' do
+              date :published_on, value_script: "doc.title.value.length()"
+            end
+          end
+
+          facets = s.results.facets['published_on']['entries']
+          assert_equal 4, facets.size, facets.inspect
+          assert_equal 2, facets.entries[1]['count'], facets.inspect
+          assert_equal 8.0, facets.entries[1]['total'], facets.inspect # Two + Three => 8 characters
         end
 
       end
@@ -153,6 +192,53 @@ module Tire
           assert_equal({"key" => 300, "count" => 1}, facets.entries[2], facets.inspect)
         end
 
+      end
+
+      context "geo distance" do
+        setup do
+          @index = Tire.index('bars-test') do
+            delete
+            create :mappings => {
+                     :bar => {
+                       :properties => {
+                         :name =>     { :type => 'string' },
+                         :location => { :type => 'geo_point', :lat_lon => true }
+                       }
+                     }
+                   }
+
+            store :type => 'bar',
+                  :name => 'one',
+                  :location => {:lat => 53.54412, :lon => 9.94021}
+            store :type => 'bar',
+                  :name => 'two',
+                  :location => {:lat => 53.54421, :lon => 9.94673}
+            store :type => 'bar',
+                  :name => 'three',
+                  :location => {:lat => 53.55099, :lon => 10.02527}
+            refresh
+          end
+        end
+
+        teardown { @index.delete }
+
+        should "return aggregated values for all results" do
+          s = Tire.search('bars-test') do
+            query { all }
+            facet 'geo' do
+              geo_distance :location,
+                           {:lat => 53.54507, :lon => 9.95309},
+                           [{:to => 1}, {:from => 1, :to => 10}, {:from => 50}],
+                           unit: 'km'
+            end
+          end
+
+          facets = s.results.facets['geo']['ranges']
+          assert_equal 3, facets.size, facets.inspect
+          assert_equal 2, facets.entries[0]['total_count'], facets.inspect
+          assert_equal 1, facets.entries[1]['total_count'], facets.inspect
+          assert_equal 0, facets.entries[2]['total_count'], facets.inspect
+        end
       end
 
       context "statistical" do
@@ -265,8 +351,8 @@ module Tire
           assert_equal 2, facets["count"], facets.inspect
         end
 
+      end
+
     end
-
   end
-
 end

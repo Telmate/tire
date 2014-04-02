@@ -60,6 +60,27 @@ module Tire
             # Add 1 to every "document" and return them
             documents.map { |d| d + 1 }
           end
+        end
+
+        should "store the documents in a different index" do
+          Tire::Index.expects(:new).with('new_index').returns( mock('index') { expects(:import) } )
+          ImportModel.import :index => 'new_index'
+        end
+
+        context 'Strategy' do
+          class ::CustomImportStrategy
+            include Tire::Model::Import::Strategy::Base
+          end
+
+          should 'return explicitly specified strategy from predefined strategies' do
+            strategy = Tire::Model::Import::Strategy.from_class(ImportModel, :strategy => 'WillPaginate')
+            assert_equal strategy.class.name, 'Tire::Model::Import::Strategy::WillPaginate'
+          end
+
+          should 'return custom strategy class' do
+            strategy = Tire::Model::Import::Strategy.from_class(ImportModel, :strategy => 'CustomImportStrategy')
+            assert_equal strategy.class.name, 'CustomImportStrategy'
+          end
 
         end
 

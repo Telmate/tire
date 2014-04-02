@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 require 'test_helper'
 
 module Tire
@@ -170,7 +172,7 @@ module Tire
                                             }
         end
 
-        should "return the mapping" do
+        should "return the mapping as a Hash" do
           json =<<-JSON
           {
             "dummy" : {
@@ -187,6 +189,33 @@ module Tire
 
           assert_equal 'string', @index.mapping['article']['properties']['title']['type']
           assert_equal 2.0,      @index.mapping['article']['properties']['title']['boost']
+        end
+
+        should "update the mapping" do
+          Configuration.client.expects(:put).returns(mock_response('{"ok":true,"acknowledged":true}', 200))
+          assert @index.mapping( 'document', { :properties => { :body => { :type => 'string', :analyzer => 'english'} } } )
+        end
+
+        should "fail to update the mapping when conflicts occur" do
+          Configuration.client.expects(:put).returns(mock_response('{"error":"MergeMappingException","status":400}', 400))
+          assert ! @index.mapping( 'document', { :properties => { :body => { :type => 'string', :analyzer => 'english'} } } )
+        end
+
+        should "raise an exception for the bang method" do
+          Configuration.client.expects(:put).returns(mock_response('{"error":"MergeMappingException","status":400}', 400))
+          assert_raise(RuntimeError) do
+            @index.mapping!("blah", {})
+          end
+        end
+
+        should "delete the mapping" do
+          Configuration.client.expects(:delete).returns(mock_response('{"ok":true}', 200))
+          assert @index.delete_mapping('document')
+        end
+
+        should "fail when deleting the mapping for non-existing type" do
+          Configuration.client.expects(:delete).returns(mock_response('{"error":"TypeMissingException[[dummy] type[document] missing]","status":404}', 400))
+          assert ! @index.delete_mapping('document')
         end
 
       end
@@ -288,12 +317,42 @@ module Tire
           @index.store '{"foo" : "bar"}'
         end
 
+        should "extract the routing information from options" do
+          Configuration.client.expects(:post).with do |url, payload|
+            assert_match /routing=abc/, url
+          end.returns(mock_response('{"ok":true,"_id":"123"}'))
+
+          @index.store( {:id => 123, :title => 'Test'}, {:routing => 'abc'} )
+        end
+
+        should "extract the replication type from options" do
+          Configuration.client.expects(:post).
+            with do |url, payload|
+              assert_equal "#{Configuration.url}/dummy/document/?replication=async", url
+            end.
+            returns(mock_response('{"ok":true,"_id":"test"}'))
+
+          @index.store({:title => 'Test'}, {:replication => 'async'})
+        end
+
+        should "extract the version from options" do
+          Configuration.client.expects(:post).
+            with do |url, payload|
+              assert_equal "#{Configuration.url}/dummy/document/?version=123", url
+            end.
+            returns(mock_response('{"ok":true,"_id":"test"}'))
+
+          @index.store({:title => 'Test'}, {:version => 123})
+        end
+
         context "document with ID" do
 
-          should "store Hash it under its ID property" do
-            Configuration.client.expects(:post).with("#{@index.url}/document/123",
-                                                     MultiJson.encode({:id => 123, :title => 'Test'})).
-                                                returns(mock_response('{"ok":true,"_id":"123"}'))
+          should "store a Hash under its ID property" do
+            Configuration.client.expects(:post).with do |path, json|
+              assert_equal "#{@index.url}/document/123", path
+              assert_equal 123, MultiJson.load(json)['id']
+            end.returns(mock_response('{"ok":true,"_id":"123"}'))
+
             @index.store :id => 123, :title => 'Test'
           end
 
@@ -302,6 +361,33 @@ module Tire
                                                      {:id => 123, :title => 'Test', :body => 'Lorem'}.to_json).
                                                 returns(mock_response('{"ok":true,"_id":"123"}'))
             @index.store Article.new(:id => 123, :title => 'Test', :body => 'Lorem')
+          end
+
+          should "convert document ID to string" do
+            # This is related to issues #529, #535, #775
+            class Document1; def id; "one"; end; end
+            class Document2; def id; 1;     end; end
+            class Document3; class ID; def to_s; 'c'; end; end
+                             def id;   ID.new; end
+            end
+
+            document_1 = Document1.new
+            document_2 = Document2.new
+            document_3 = Document3.new
+
+            assert_equal 'one', @index.get_id_from_document(document_1)
+            assert_equal '1',   @index.get_id_from_document(document_2)
+            assert_equal 'c',   @index.get_id_from_document(document_3)
+          end
+
+          should "escape the ID in URL" do
+            Configuration.client.expects(:post).with do |url, payload|
+              assert_equal "#{@index.url}/document/%C3%A4ccent", url
+              assert_equal 'äccent', MultiJson.load(payload)['id']
+            end.
+            returns(mock_response('{"ok":true,"_id":"äccent"}'))
+
+            @index.store :id => 'äccent'
           end
 
         end
@@ -356,10 +442,26 @@ module Tire
           assert_equal nil, article
         end
 
+        should "raise an error for server errors" do
+          Configuration.client.expects(:get).with("#{@index.url}/article/id-1").
+                                             returns(mock_response('BOOM', 500))
+          assert_raise RuntimeError do
+            article = @index.retrieve :article, 'id-1'
+            assert_equal nil, article
+          end
+        end
+
         should "raise error when no ID passed" do
           assert_raise ArgumentError do
             @index.retrieve 'article', nil
           end
+        end
+
+        should "escape the ID in URL" do
+          Configuration.client.expects(:get).with("#{@index.url}/document/%C3%A4ccent").
+                                             returns(mock_response('{"_id":"äccent"}'))
+
+          @index.retrieve 'document', 'äccent'
         end
 
         should "properly encode document type" do
@@ -440,6 +542,13 @@ module Tire
           end
         end
 
+        should "escape the ID in URL" do
+          Configuration.client.expects(:delete).with("#{@index.url}/document/%C3%A4ccent").
+                                                returns(mock_response('{"ok":true,"_id":"äccent"}'))
+
+          @index.remove 'document', 'äccent'
+        end
+
         should "properly encode document type" do
           Configuration.client.expects(:delete).with("#{@index.url}/my_namespace%2Fmy_model/id-1").
                                              returns(mock_response('{"_id":"id-1","_version":1, "_source" : {"title":"Test"}}'))
@@ -450,7 +559,7 @@ module Tire
 
       context "when updating" do
 
-        should "send payload" do
+        should "send script payload" do
           Configuration.client.expects(:post).with do |url,payload|
                                 payload = MultiJson.decode(payload)
                                 # p [url, payload]
@@ -463,6 +572,20 @@ module Tire
                                 mock_response('{"ok":"true","_index":"dummy","_type":"document","_id":"42","_version":"2"}'))
 
           assert @index.update('document', '42', {:script => "ctx._source.foo = bar;", :params => { :bar => '21' }})
+        end
+
+        should "send partial doc payload" do
+          Configuration.client.expects(:post).with do |url,payload|
+                                payload = MultiJson.decode(payload)
+                                # p [url, payload]
+                                assert_equal( "#{@index.url}/document/42/_update", url ) &&
+                                assert_not_nil( payload['doc'] ) &&
+                                assert_equal('bar', payload['doc']['foo'])
+                              end.
+                              returns(
+                                mock_response('{"ok":"true","_index":"dummy","_type":"document","_id":"42","_version":"2"}'))
+
+          assert @index.update('document', '42', {:doc => {:foo => 'bar'}})
         end
 
         should "send options" do
@@ -482,16 +605,25 @@ module Tire
           assert_raise(ArgumentError) { @index.update(nil, '123', :script => 'foobar') }
         end
 
-        should "raise an error when no script is passed" do
-          assert_raise ArgumentError do
-            @index.update('article', "42", {:params => {"foo" => "bar"}})
-          end
+        should "escape the ID in URL" do
+          Configuration.client.expects(:post).with do |url,payload|
+                                assert_equal( "#{@index.url}/document/%C3%A4ccent/_update", url )
+                              end.
+                              returns(mock_response('{"ok":"true","_id":"äccent","_version":"2"}'))
+
+          assert @index.update('document', 'äccent', {:doc => {:foo => 'bar'}})
         end
+
+        should "raise an error when no script or partial document is passed" do
+           assert_raise ArgumentError do
+             @index.update('article', "42", {:foo => 'bar'})
+           end
+         end
 
       end
 
       context "when performing a bulk api action" do
-        # Possible Bulk API actions are `index`, `create`, `delete`
+        # Possible Bulk API actions are `index`, `create`, `delete`, `update`
         #
         # The expected JSON looks like this:
         #
@@ -500,6 +632,8 @@ module Tire
         # {"create":{"_index":"dummy","_type":"document","_id":"2"}}
         # {"id":"2","title":"Two"}
         # {"delete":{"_index":"dummy","_type":"document","_id":"2"}}
+        # {"update":{"_index":"dummy","_type":"document","_id":"1","_retry_on_conflict": 3}}
+        # {"doc":{"title":"Updated One"}}
         #
         # See http://www.elasticsearch.org/guide/reference/api/bulk.html
 
@@ -556,26 +690,77 @@ module Tire
           @index.bulk :delete, [ {:id => '1', :title => 'One'}, {:id => '2', :title => 'Two'} ]
         end
 
-        should "serialize meta parameters such as routing into payload header" do
+        should "serialize payload for update action" do
+          Configuration.client.
+            expects(:post).
+            with do |url, payload|
+              assert_equal "#{@index.url}/_bulk", url
+              assert_match /"update"/, payload
+              assert_match /"_index":"dummy"/, payload
+              assert_match /"_type":"document"/, payload
+              assert_match /"_id":"1"/, payload
+              assert_match /"_id":"2"/, payload
+              lines = payload.split("\n")
+              assert_equal 'One', MultiJson.decode(lines[1])['doc']['title']
+              assert_equal 'Two', MultiJson.decode(lines[3])['doc']['title']
+              assert_equal true, MultiJson.decode(lines[3])['doc_as_upsert']
+            end.
+            returns(mock_response('{}'), 200)
+
+          @index.bulk :update, [ {:id => '1', :doc => {:title => 'One'}}, {:id => '2', :doc => {:title => 'Two'}, :doc_as_upsert => true} ]
+        end
+
+        should 'serialize _retry_on_conflict parameter into payload header' do
+          Configuration.client.
+            expects(:post).
+            with do |url, payload|
+              lines = payload.split("\n")
+              assert_equal 3, MultiJson.decode(lines[0])['update']['_retry_on_conflict']
+              assert_equal 3, MultiJson.decode(lines[2])['update']['_retry_on_conflict']
+            end.
+            returns(mock_response('{}'), 200)
+
+          @index.bulk :update, [ {:id => '1', :doc => {:title => 'One'}}, {:id => '2', :doc => {:title => 'Two'}} ], :retry_on_conflict => 3
+        end
+
+        should "serialize meta parameters into payload header" do
           Configuration.client.
             expects(:post).
             with do |url, payload|
               # print payload
               lines = payload.split("\n")
-              assert_match /"_routing":"A"/, lines[0]
-              assert_match /"_routing":"B"/, lines[2]
-              assert_match /"_ttl":"1d"/,    lines[2]
-              assert ! lines[4].include?('"_routing"')
+
+              assert_match /"_routing":"A"/,                     lines[0]
+
+              assert_match /"_ttl":"1d"/,                        lines[2]
+              assert ! lines[2].include?('"_:parent"')
+
+              assert_match /"_version":"1234"/,                  lines[4]
+              assert ! lines[4].include?('"_:routing"')
+
+              assert_match /"_version_type":"external"/,         lines[6]
+              assert ! lines[6].include?('"_:garbage"')
+
+              assert_match /"_percolate":"color:green"/,         lines[8]
+
+              assert_match /"_parent":"5678"/,                   lines[10]
+
+              assert_match /"_timestamp":"2013-02-15 11:00:33"/, lines[12]
+
+              true
             end.
             returns(mock_response('{}'), 200)
 
           @index.bulk :index,
                       [
-                        {:id => '1', :title => 'One', :_routing => 'A'},
-                        {:id => '2', :title => 'Two', :_routing => 'B', :_ttl => '1d'},
-                        {:id => '3', :title => 'Three'}
+                          {:id => '1', :title => 'One',   :_routing => 'A'},
+                          {:id => '2', :title => 'Two',   :_ttl => '1d', :_parent => false},
+                          {:id => '3', :title => 'Three', :_version => '1234', :_routing => ""},
+                          {:id => '4', :title => 'Four',  :_version_type => 'external', :_garbage => "stuff"},
+                          {:id => '5', :title => 'Five',  :_percolate => 'color:green'},
+                          {:id => '6', :title => 'Six',   :_parent => '5678'},
+                          {:id => '7', :title => 'Seven', :_timestamp => '2013-02-15 11:00:33'},
                       ]
-
         end
 
         should "pass URL parameters such as refresh or consistency" do
@@ -707,6 +892,12 @@ module Tire
 
           @index.bulk :index,  [ {:id => '1', :title => 'One'} ]
         end
+
+
+          should "return immediately with empty collection" do
+            Configuration.client.expects(:post).never
+            @index.bulk_store []
+          end
 
       end
 

@@ -1,6 +1,6 @@
 module Tire
 
-  # Represents an *alias* in _ElasticSearch_. An alias may point to one or multiple
+  # Represents an *alias* in _Elasticsearch_. An alias may point to one or multiple
   # indices, for instance to separate physical indices into logical entities, where
   # each user has a "virtual index" or for setting up "sliding window" scenarios.
   #
@@ -77,7 +77,7 @@ module Tire
       @attributes = { :indices => IndexCollection.new([]) }
 
       attributes.each_pair do |key, value|
-        if key.to_s =~ /index|indices/
+        if ['index','indices'].include? key.to_s
           @attributes[:indices] = IndexCollection.new(value)
         else
           @attributes[key.to_sym] = value
@@ -156,7 +156,7 @@ module Tire
       type ? (@attributes[:filter] = Search::Filter.new(type, *options).to_hash and return self ) : @attributes[:filter]
     end
 
-    # Save the alias in _ElasticSearch_
+    # Save the alias in _Elasticsearch_
     #
     def save
       @response = Configuration.client.post "#{Configuration.url}/_aliases", to_json
@@ -184,7 +184,7 @@ module Tire
       { :actions => actions }
     end
 
-    # Return alias serialized in JSON for _ElasticSearch_
+    # Return alias serialized in JSON for _Elasticsearch_
     #
     def to_json(options=nil)
       as_json.to_json

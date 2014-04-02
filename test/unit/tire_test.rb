@@ -15,31 +15,62 @@ module Tire
       context "DSL" do
 
         should "allow searching with a block" do
-          Search::Search.expects(:new).returns( stub(:perform => true) )
+          Search::Search.expects(:new).with do |index, options, block|
+            assert_equal 'dummy', index
+          end.returns( stub(:perform => true) )
 
           Tire.search 'dummy' do
-            query 'foo'
+            query { string 'foo' }
           end
         end
 
         should "allow searching with a Ruby Hash" do
           payload = { :query => { :query_string => { :query => 'foo' } } }
-          Search::Search.expects(:new).with('dummy', :payload => payload).returns( stub(:perform => true) )
 
-          Tire.search 'dummy', payload
-        end
+          Search::Search.expects(:new).with do |index, options|
+            assert_equal index, 'dummy'
+            assert_equal payload, options[:payload]
+          end.returns( stub(:perform => true) )
 
-        should "allow searching with a JSON string" do
-          payload = '{"query":{"query_string":{"query":"foo"}}}'
-          Search::Search.expects(:new).with('dummy', :payload => payload).returns( stub(:perform => true) )
-
-          Tire.search 'dummy', payload
+          s = Tire.search 'dummy', payload
         end
 
         should "raise an error when passed incorrect payload" do
           assert_raise(ArgumentError) do
             Tire.search 'dummy', 1
           end
+        end
+
+        should "convert params objects to hash" do
+          class ::MyParamsObject;
+            def initialize(hash)
+              @hash = hash
+            end
+            def to_hash
+              @hash
+            end
+          end
+
+          Tire.search 'dummy', ::MyParamsObject.new(:foo => 'bar')
+        end
+
+        should "extract URL parameters from options" do
+          payload = { :query => { :match => { :foo => 'bar' } } }
+
+          Search::Search.expects(:new).with do |index, options|
+            assert_equal 'bar',   options[:payload][:query][:match][:foo]
+            assert_equal 'count', options[:search_type]
+          end.returns( stub(:perform => true) )
+
+          Tire.search 'dummy', :query => { :match => { :foo => 'bar' } }, :search_type => 'count'
+        end
+
+        should "allow to pass document type" do
+          Search::Search.expects(:new).with do |index, options|
+            assert_equal 'dummy/foo', index
+          end
+
+          Tire.search 'dummy/foo', {}
         end
 
         should "raise SearchRequestFailed when receiving bad response from backend" do
@@ -60,6 +91,10 @@ module Tire
         should "allow to call multi_search" do
           assert_respond_to Tire, :multi_search
           assert_respond_to Tire, :msearch
+        end
+
+        should "count documents" do
+          assert_respond_to Tire, :count
         end
 
         context "when retrieving results" do

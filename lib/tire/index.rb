@@ -1,6 +1,8 @@
 module Tire
   class Index
 
+    SUPPORTED_META_PARAMS_FOR_BULK = [:_routing, :_ttl, :_version, :_version_type, :_percolate, :_parent, :_timestamp]
+
     attr_reader :name, :response
 
     def initialize(name, &block)
@@ -52,9 +54,64 @@ module Tire
       alias_name ? Alias.all(@name).select { |a| a.name == alias_name }.first : Alias.all(@name)
     end
 
-    def mapping
+    # Get or update the index mapping
+    #
+    # Without arguments, returns the index mapping as a Hash
+    #
+    # When passed arguments, attempts to update the index mapping:
+    #
+    #     index.mapping 'article', properties: { body: { type: "string" } }
+    #
+    # You can pass the `ignore_conflicts` option as a part of the Hash:
+    #
+    #     index.mapping 'article', properties: { body: { type: "string" } }, ignore_conflicts: true
+    #
+    def mapping(*args)
+      args.empty? ? get_mapping : put_mapping(*args)
+    end
+
+    # Raises an exception for unsuccessful responses
+    #
+    def mapping!(*args)
+      mapping(*args)
+      raise RuntimeError, response.body unless response.success?
+    end
+
+    def get_mapping
       @response = Configuration.client.get("#{url}/_mapping")
-      MultiJson.decode(@response.body)[@name]
+      result = MultiJson.decode(@response.body)[@name]
+      @response.success? ? result : false
+    ensure
+      curl = %Q|curl -X GET "#{url}/_mapping?pretty"|
+      logged("GET MAPPING", curl)
+    end
+
+    def put_mapping(type, mapping)
+      params = {}
+      if ignore_conflicts = mapping.delete(:ignore_conflicts) || mapping.delete("ignore_conflicts")
+        params[:ignore_conflicts] = ignore_conflicts
+      end
+
+      url  = "#{self.url}/#{type}/_mapping"
+      url += "?#{params.to_param}" unless params.empty?
+
+      payload = { type => mapping }.to_json
+
+      @response = Configuration.client.put url, payload
+      result = MultiJson.decode(@response.body)
+      @response.success? ? result : false
+    ensure
+      curl = %Q|curl -X PUT "#{url}" -d '#{payload}'|
+      logged("PUT MAPPING #{type}", curl)
+    end
+
+    def delete_mapping(type)
+      url = "#{self.url}/#{type}"
+      @response = Configuration.client.delete(url)
+      @response.success?
+    ensure
+      curl = %Q|curl -X DELETE "#{url}"|
+      logged("DELETE MAPPING #{type}", curl)
     end
 
     def settings
@@ -77,11 +134,14 @@ module Tire
         params[:percolate] = "*" if params[:percolate] === true
       end
 
-      params[:parent] = options[:parent] if options[:parent]
+      params[:parent]  = options[:parent]  if options[:parent]
+      params[:routing] = options[:routing] if options[:routing]
+      params[:replication] = options[:replication] if options[:replication]
+      params[:version] = options[:version] if options[:version]
 
       params_encoded = params.empty? ? '' : "?#{params.to_param}"
 
-      url  = id ? "#{self.url}/#{type}/#{id}#{params_encoded}" : "#{self.url}/#{type}/#{params_encoded}"
+      url  = id ? "#{self.url}/#{type}/#{Utils.escape(id)}#{params_encoded}" : "#{self.url}/#{type}/#{params_encoded}"
 
       @response = Configuration.client.post url, document
       MultiJson.decode(@response.body)
@@ -94,15 +154,17 @@ module Tire
     #
     #     @myindex.bulk :index, [ {id: 1, title: 'One'}, { id: 2, title: 'Two', _version: 3 } ], refresh: true
     #
-    # Pass the action (`index`, `create`, `delete`) as the first argument, the collection of documents as
+    # Pass the action (`index`, `create`, `delete`, `update`) as the first argument, the collection of documents as
     # the second argument, and URL parameters as the last option.
     #
     # Any _meta_ information contained in documents (such as `_routing` or `_parent`) is extracted
     # and added to the "header" line.
     #
-    # Shortcut methods `bulk_store`, `bulk_delete` and `bulk_create` are available.
+    # Shortcut methods `bulk_store`, `bulk_delete`, `bulk_create`, and `bulk_update` are available.
     #
     def bulk(action, documents, options={})
+      return false if documents.empty?
+
       # TODO: A more Ruby-like DSL notation should be supported:
       #
       #     Tire.index('myindex').bulk do
@@ -110,7 +172,7 @@ module Tire
       #       delete id: 1
       #       # ...
       #     end
-      #
+
       payload = documents.map do |document|
         type = get_type_from_document(document, :escape => false) # Do not URL-escape the _type
         id   = get_id_from_document(document)
@@ -119,18 +181,50 @@ module Tire
           STDERR.puts "[ERROR] Document #{document.inspect} does not have ID" unless id
         end
 
-        header = { action.to_sym => { :_index => name, :_type => type, :_id => id } }
+        if action.to_sym == :update
+          raise ArgumentError, "Cannot update without document type" unless type
+          raise ArgumentError, "Cannot update without document ID" unless id
+          raise ArgumentError, "Update requires a hash document" unless document.respond_to?(:to_hash)
+          document = document.to_hash
+          raise ArgumentError, "Update requires either a script or a partial document" unless document[:script] || document[:doc]
+        end
 
-        if document.respond_to?(:to_hash) && hash = document.to_hash
-          meta = {}
-          meta[:_version]   = hash.delete(:_version)
-          meta[:_routing]   = hash.delete(:_routing)
-          meta[:_percolate] = hash.delete(:_percolate)
-          meta[:_parent]    = hash.delete(:_parent)
-          meta[:_timestamp] = hash.delete(:_timestamp)
-          meta[:_ttl]       = hash.delete(:_ttl)
-          meta              = meta.reject { |name,value| !value || value.empty? }
+        header = { action.to_sym => { :_index => name, :_type => type, :_id => id } }
+        header[action.to_sym].update({:_retry_on_conflict => options[:retry_on_conflict]}) if options[:retry_on_conflict]
+
+        if document.respond_to?(:to_hash) && doc_hash = document.to_hash
+          meta = doc_hash.select do |k,v|
+            [ :_parent,
+              :_percolate,
+              :_retry_on_conflict,
+              :_routing,
+              :_timestamp,
+              :_ttl,
+              :_version,
+              :_version_type].include?(k)
+          end
+          # Normalize Ruby 1.8 and Ruby 1.9 Hash#select behaviour
+          meta = Hash[meta] unless meta.is_a?(Hash)
+
+          # meta = SUPPORTED_META_PARAMS_FOR_BULK.inject({}) { |hash, param|
+          #   value = doc_hash.delete(param)
+          #   hash[param] = value unless !value || value.empty?
+          #   hash
+          # }
           header[action.to_sym].update(meta)
+        end
+
+        if action.to_sym == :update
+          document.keep_if do |k,_|
+            [
+              :doc,
+              :upsert,
+              :doc_as_upsert,
+              :script,
+              :params,
+              :lang
+            ].include?(k)
+          end
         end
 
         output = []
@@ -164,7 +258,8 @@ module Tire
         end
 
       ensure
-        curl = %Q|curl -X POST "#{url}/_bulk" --data-binary '{... data omitted ...}'|
+        data = Configuration.logger && Configuration.logger.level.to_s == 'verbose' ? payload.join("\n") : '... data omitted ...'
+        curl = %Q|curl -X POST "#{url}/_bulk" --data-binary '#{data}'|
         logged('_bulk', curl)
       end
 
@@ -182,16 +277,21 @@ module Tire
       bulk :delete, documents, options
     end
 
+    def bulk_update(documents, options={})
+      bulk :update, documents, options
+    end
+
     def import(klass_or_collection, options={})
       case
         when method = options.delete(:method)
           options = {:page => 1, :per_page => 1000}.merge options
-          while documents = klass_or_collection.send(method.to_sym, options.merge(:page => options[:page])) \
-                            and documents.to_a.length > 0
+          while (documents = klass_or_collection.send(method.to_sym, options.merge(:page => options[:page]))) \
+                            && documents.to_a.length > 0
 
             documents = yield documents if block_given?
 
             bulk_store documents, options
+            GC.start
             options[:page] += 1
           end
 
@@ -200,8 +300,8 @@ module Tire
           bulk_store documents, options
 
         else
-          raise ArgumentError, "Please pass either an Enumerable compatible class, or a collection object" +
-                               "with a method for fetching records in batches (such as 'paginate')"
+          raise ArgumentError, "Please pass either an Enumerable compatible class, or a collection object " +
+                               "with a method for fetching records in batches (such as 'paginate')."
       end
     end
 
@@ -235,20 +335,19 @@ module Tire
       end
       raise ArgumentError, "Please pass a document ID" unless id
 
-      url    = "#{self.url}/#{type}/#{id}"
+      url    = "#{self.url}/#{type}/#{Utils.escape(id)}"
       result = Configuration.client.delete url
       MultiJson.decode(result.body) if result.success?
 
     ensure
       curl = %Q|curl -X DELETE "#{url}"|
-      logged(id, curl)
+      logged("#{type}/#{id}", curl)
     end
 
     def retrieve(type, id, options={})
       raise ArgumentError, "Please pass a document ID" unless id
 
-      type      = Utils.escape(type)
-      url       = "#{self.url}/#{type}/#{id}"
+      url       = "#{self.url}/#{Utils.escape(type)}/#{Utils.escape(id)}"
 
       params    = {}
       params[:routing]    = options[:routing] if options[:routing]
@@ -257,12 +356,15 @@ module Tire
       params_encoded      = params.empty? ? '' : "?#{params.to_param}"
 
       @response = Configuration.client.get "#{url}#{params_encoded}"
+      if @response && @response.failure? && @response.code != 404
+        raise RuntimeError, "#{@response.code} > #{@response.body}"
+      end
 
       h = MultiJson.decode(@response.body)
       wrapper = options[:wrapper] || Configuration.wrapper
       if wrapper == Hash then h
       else
-        return nil if h['exists'] == false
+        return nil if (h['exists'] || h['found']) == false
         document = h['_source'] || h['fields'] || {}
         document.update('id' => h['_id'], '_type' => h['_type'], '_index' => h['_index'], '_version' => h['_version'])
         wrapper.new(document)
@@ -270,16 +372,16 @@ module Tire
 
     ensure
       curl = %Q|curl -X GET "#{url}"|
-      logged(id, curl)
+      logged("#{type}/#{id}", curl)
     end
 
     def update(type, id, payload={}, options={})
       raise ArgumentError, "Please pass a document type" unless type
       raise ArgumentError, "Please pass a document ID"   unless id
-      raise ArgumentError, "Please pass a script in the payload hash" unless payload[:script]
+      raise ArgumentError, "Please pass a script or partial document in the payload hash" unless payload[:script] || payload[:doc]
 
       type      = Utils.escape(type)
-      url       = "#{self.url}/#{type}/#{id}/_update"
+      url       = "#{self.url}/#{type}/#{Utils.escape(id)}/_update"
       url      += "?#{options.to_param}" unless options.keys.empty?
       @response = Configuration.client.post url, MultiJson.encode(payload)
       MultiJson.decode(@response.body)
@@ -415,7 +517,7 @@ module Tire
         when document.is_a?(Hash)
           document[:_id] || document['_id'] || document[:id] || document['id']
         when document.respond_to?(:id) && document.id != document.object_id
-          document.id
+          document.id.to_s
       end
       $VERBOSE = old_verbose
       id
