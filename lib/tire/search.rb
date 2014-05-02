@@ -14,6 +14,7 @@ module Tire
           @indices = Array(indices)
         end
         @types   = Array(options.delete(:type)).map { |type| Utils.escape(type) }
+        @config_url = options.delete(:config_url) # allow per-search url changes
         @options = options
 
         @path    = ['/', @indices.join(','), @types.join(','), '_search'].compact.join('/').squeeze('/')
@@ -44,7 +45,7 @@ module Tire
       end
 
       def url
-        Configuration.url + @path
+        (@config_url || Configuration.url) + @path
       end
 
       def params
