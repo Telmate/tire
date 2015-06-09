@@ -173,7 +173,7 @@ module Tire
 
         def log_alias_create(alias_name, target, response)
           if response && response.code == 200
-            STDOUT.puts "Created an alias named '#{alias_name}' that points to '#{target}'"
+            Configuration.logger.write "Created an alias named '#{alias_name}' that points to '#{target}'" if Configuration.logger
           else
             STDERR.puts "Failed creating an alias named '#{alias_name}' that points to '#{target}'"
           end
@@ -181,7 +181,7 @@ module Tire
 
         def log_index_create(index)
           if index.response && index.response.code == 200
-            STDOUT.puts "Created a new index '#{index.name}'"
+            Configuration.logger.write "Created a new index '#{index.name}'" if Configuration.logger
           else
             STDERR.puts "Could not create index '#{index.name}'"
           end
