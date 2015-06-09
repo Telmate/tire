@@ -16,7 +16,7 @@ module Tire
 
     def self.logger(device=nil, options={})
       return @logger = Logger.new(device, options) if device
-      if !@warned
+      if !@logger && !@warned
         STDOUT.puts "WARNING: No ElasticSearch logger defined, only errors will be logged to STDERR, no info logging"
         @warned = true
       end
