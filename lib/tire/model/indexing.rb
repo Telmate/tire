@@ -103,13 +103,65 @@ module Tire
 
         # Creates the corresponding index with desired settings and mappings, when it does not exists yet.
         #
+        # If the Class's 'index_name' ends with '_alias' then it creates an ElasticSearch alias, and points
+        # it to a new index whose name contains a timestamp.  Before creating that new timestamped index
+        # it tries to find existing indexes that look like they should be the alias target.  If it finds
+        # one it will point the alias to that instead of creating a new index.
+        #
+        # For example:
+        #
+        # class MyClass
+        #   index_name 'inmates_alias'
+        # end
+        #
+        # If there's an index named 'inmates', it will create an alias 'inmates_alias' that points to
+        # 'inmates'. If there's an index named 'inmates_20150313120000' it will create an alias
+        # 'inmates_alias' that points to 'inmates_20150313120000'.  If there are multiple timestamped
+        # indices, it chooses the newest one based on the numeric timestamp.
+        #
+        # If there are no existing indices to link an alias too, then it will create a real index
+        # named 'inmates_20150313030303' (Time.now) and create an alias 'inmates_alias'
+        # that points to that index.
+        #
+        # If index_name doesn't end in '_alias' then it just creates the index named index_name, and
+        # no timestamping business occurs.  This is the original Tire implementation.
+        #
         def create_elasticsearch_index
           unless index.exists?
-            new_index = index
-            unless result = new_index.create(:mappings => mapping_to_hash, :settings => settings)
-              STDERR.puts "[ERROR] There has been an error when creating the index -- elasticsearch returned:",
-                          new_index.response
-              result
+            if index_name[/(.*)_alias$/]
+              name_prefix = $1
+              found_untimestamped_index = false
+              timestamped_index_name = nil
+              timestamp = nil
+              Tire::Index.all.each do |index_name|
+                if index_name[Regexp.new("^#{name_prefix}$")]
+                  # ^^ look for an index without the _alias prefix in its name
+                  found_untimestamped_index = true
+                elsif index_name[Regexp.new("^#{name_prefix}_(\\d{14})$")] && (timestamp.blank? || $1.to_i > timestamp.to_i)
+                  # ^^ look for an index with a timestamp in its name, and store the newest one (timestamp)
+                  timestamp = $1
+                  timestamped_index_name = index_name
+                end
+              end
+              if timestamp.present?
+                response = Tire::Alias.create({name: index_name, indices: [timestamped_index_name]})
+                log_alias_create(index_name, timestamped_index_name, response)
+              elsif found_untimestamped_index
+                response = Tire::Alias.create({name: index_name, indices: [name_prefix]})
+                log_alias_create(index_name, name_prefix, response)
+              else
+                new_index = Tire.index("#{index_name.sub(/_alias$/, Time.now.strftime("_%Y%m%d%H%M%S"))}")
+                successful = new_index.create
+                log_index_create(new_index)
+                if successful
+                  response = Tire::Alias.create({name: index_name, indices: [new_index.name]})
+                  log_alias_create(index_name, new_index.name, response)
+                end
+              end
+            else
+              new_index = index
+              index.create(:mappings => mapping_to_hash, :settings => settings)
+              log_index_create(new_index)
             end
           end
 
@@ -117,6 +169,22 @@ module Tire
           STDERR.puts "Skipping index creation, cannot connect to Elasticsearch",
                       "(The original exception was: #{e.inspect})"
           false
+        end
+
+        def log_alias_create(alias_name, target, response)
+          if response && response.code == 200
+            Configuration.logger.write "Created an alias named '#{alias_name}' that points to '#{target}'" if Configuration.logger
+          else
+            STDERR.puts "Failed creating an alias named '#{alias_name}' that points to '#{target}'"
+          end
+        end
+
+        def log_index_create(index)
+          if index.response && index.response.code == 200
+            Configuration.logger.write "Created a new index '#{index.name}'" if Configuration.logger
+          else
+            STDERR.puts "Could not create index '#{index.name}'"
+          end
         end
 
         def mapping_options

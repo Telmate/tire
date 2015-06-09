@@ -5,6 +5,10 @@ module Tire
 
     attr_reader :name, :response
 
+    def self.all
+      MultiJson.decode(Tire::Configuration.client.get(Tire::Configuration.url + '/_aliases').body).keys
+    end
+
     def initialize(name, &block)
       @name = name
       block.arity < 1 ? instance_eval(&block) : block.call(self) if block_given?
