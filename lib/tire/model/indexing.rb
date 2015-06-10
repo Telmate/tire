@@ -151,17 +151,16 @@ module Tire
                 log_alias_create(index_name, name_prefix, response)
               else
                 new_index = Tire.index("#{index_name.sub(/_alias$/, Time.now.strftime("_%Y%m%d%H%M%S"))}")
-                successful = new_index.create
-                log_index_create(new_index)
-                if successful
+                response = new_index.create
+                if log_index_create(response)
                   response = Tire::Alias.create({name: index_name, indices: [new_index.name]})
                   log_alias_create(index_name, new_index.name, response)
                 end
               end
             else
               new_index = index
-              index.create(:mappings => mapping_to_hash, :settings => settings)
-              log_index_create(new_index)
+              response = new_index.create(:mappings => mapping_to_hash, :settings => settings)
+              log_index_create(response)
             end
           end
 
@@ -179,11 +178,13 @@ module Tire
           end
         end
 
-        def log_index_create(index)
-          if index.response && index.response.code == 200
+        def log_index_create(response)
+          if response && response.code == 200
             Configuration.logger.write "Created a new index '#{index.name}'" if Configuration.logger
+            return true
           else
             STDERR.puts "Could not create index '#{index.name}'"
+            return false
           end
         end
 
