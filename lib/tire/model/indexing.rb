@@ -151,7 +151,7 @@ module Tire
                 log_alias_create(index_name, name_prefix, response)
               else
                 new_index = Tire.index("#{index_name.sub(/_alias$/, Time.now.strftime("_%Y%m%d%H%M%S"))}")
-                response = new_index.create
+                response = new_index.create(:mappings => mapping_to_hash, :settings => settings)
                 if log_index_create(response)
                   response = Tire::Alias.create({name: index_name, indices: [new_index.name]})
                   log_alias_create(index_name, new_index.name, response)
