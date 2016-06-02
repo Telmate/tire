@@ -2,8 +2,10 @@ module Tire
   module Results
 
     class Item
-      extend  ActiveModel::Naming
-      include ActiveModel::Conversion
+      if defined?(ActiveModel)
+        extend  ActiveModel::Naming
+        include ActiveModel::Conversion
+      end
 
       # Create new instance, recursively converting all Hashes to Item
       # and leaving everything else alone.
