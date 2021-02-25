@@ -359,12 +359,13 @@ module Tire
       params[:preference] = options[:preference] if options[:preference]
       params_encoded      = params.empty? ? '' : "?#{params.to_param}"
 
-      @response = Configuration.client.get "#{url}#{params_encoded}"
-      raise RuntimeError, "#{@response.code} > #{@response.body}" if @response && @response.failure? && @response.code != 404
+      response = Configuration.client.get "#{url}#{params_encoded}"
+      @response = response
+      raise RuntimeError, "#{response.code} > #{response.body}" if response && response.failure? && response.code != 404
 
-      return nil if @response && @response.failure? && @response.code == 404
+      return nil if response && response.failure? && response.code == 404
 
-      h = MultiJson.decode(@response.body)
+      h = MultiJson.decode(response.body)
       return nil if h['exists'] == false || h['found'] == false
 
       wrapper = options[:wrapper] || Configuration.wrapper
